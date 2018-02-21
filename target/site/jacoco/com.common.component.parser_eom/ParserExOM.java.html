@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ParserExOM.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">excel-object-mapper</a> &gt; <a href="index.source.html" class="el_package">com.common.component.parser_eom</a> &gt; <span class="el_source">ParserExOM.java</span></div><h1>ParserExOM.java</h1><pre class="source lang-java linenums">package com.common.component.parser_eom;
+
+import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import com.common.component.parser_eom.annotation.Column;
+import com.common.component.parser_eom.util.ApplicationConstants;
+import com.common.component.parser_eom.util.EachFieldCallback;
+import com.common.component.parser_eom.util.ReflectionUtils;
+
+/**
+ * This class defines the excel parsing utilities and converting it to Java
+ * Object list. ParserExOM named for Parser Excel Object Mapper
+ * 
+ * @author Deloitte
+ *
+ */
+public class ParserExOM {
+
+	private final InputStream inputStream;
+	private Class classReference;
+	private int fileTypeCode;
+
+<span class="fc" id="L38">	private ParserExOM(InputStream inputStream, int fileTypeCode) {</span>
+<span class="fc" id="L39">		this.inputStream = inputStream;</span>
+<span class="fc" id="L40">		this.fileTypeCode = fileTypeCode;</span>
+<span class="fc" id="L41">	}</span>
+
+	private static ParserExOM mapFromExcel(InputStream inputStream, int fileTypeCode) {
+<span class="fc" id="L44">		return new ParserExOM(inputStream, fileTypeCode);</span>
+	}
+
+	public ParserExOM toObjectOf(Class classReference) {
+<span class="fc" id="L48">		this.classReference = classReference;</span>
+<span class="fc" id="L49">		return this;</span>
+	}
+
+	private String getValueByName(String name, Row row, Map&lt;String, Integer&gt; cells) {
+<span class="fc bfc" id="L53" title="All 2 branches covered.">		if (cells.get(name) == null) {</span>
+<span class="fc" id="L54">			return null;</span>
+		}
+
+<span class="fc" id="L57">		Cell cell = row.getCell(cells.get(name));</span>
+<span class="fc" id="L58">		return getCellValue(cell);</span>
+	}
+
+	private void mapName2Index(String name, Row row, Map&lt;String, Integer&gt; cells, boolean isMappedByUser) {
+<span class="fc" id="L62">		int index = findIndexCellByName(name, row, isMappedByUser);</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">		if (index != -1) {</span>
+<span class="fc" id="L64">			cells.put(name, index);</span>
+		}
+<span class="fc" id="L66">	}</span>
+
+	private void readExcelHeader(final Row row, final Map&lt;String, Integer&gt; cells) throws Throwable {
+<span class="fc" id="L69">		ReflectionUtils.eachFields(classReference, new EachFieldCallback() {</span>
+
+			public void each(Field field, String name) throws Throwable {
+				
+<span class="fc" id="L73">				boolean isMappedByUser = false;</span>
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">				if(field.isAnnotationPresent(Column.class)) {</span>
+<span class="nc" id="L75">					isMappedByUser = true;</span>
+				}
+<span class="fc" id="L77">				mapName2Index(name, row, cells, isMappedByUser);</span>
+<span class="fc" id="L78">			}</span>
+		});
+<span class="fc" id="L80">	}</span>
+
+	private Object readExcelContent(final Row row, final Map&lt;String, Integer&gt; cells) throws Throwable {
+<span class="fc" id="L83">		final Object instance = classReference.newInstance();</span>
+<span class="fc" id="L84">		ReflectionUtils.eachFields(classReference, new EachFieldCallback() {</span>
+
+			public void each(Field field, String name) throws Throwable {
+<span class="fc" id="L87">				ReflectionUtils.setValueOnField(instance, field, getValueByName(name, row, cells));</span>
+<span class="fc" id="L88">			}</span>
+		});
+
+<span class="fc" id="L91">		return instance;</span>
+	}
+
+	public &lt;T&gt; List&lt;T&gt; map() throws Throwable {
+
+<span class="fc" id="L96">		List&lt;T&gt; items = new ArrayList&lt;T&gt;();</span>
+
+		try {
+			Iterator&lt;Row&gt; rowIterator;
+			int numberOfSheets;
+			Workbook workbook;
+
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">			if (this.fileTypeCode == ApplicationConstants.CODE_XLS) {</span>
+<span class="fc" id="L104">				workbook = new HSSFWorkbook(this.inputStream);</span>
+<span class="fc" id="L105">				numberOfSheets = workbook.getNumberOfSheets();</span>
+			} else { // Excel 2007+
+<span class="nc" id="L107">				workbook = new XSSFWorkbook(this.inputStream);</span>
+<span class="nc" id="L108">				numberOfSheets = workbook.getNumberOfSheets();</span>
+			}
+
+<span class="fc bfc" id="L111" title="All 2 branches covered.">			for (int index = 0; index &lt; numberOfSheets; index++) {</span>
+<span class="fc" id="L112">				Sheet sheet = workbook.getSheetAt(index);</span>
+<span class="fc" id="L113">				rowIterator = sheet.iterator();</span>
+
+<span class="fc" id="L115">				Map&lt;String, Integer&gt; nameIndexMap = new HashMap&lt;String, Integer&gt;();</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">				while (rowIterator.hasNext()) {</span>
+<span class="fc" id="L117">					Row row = rowIterator.next();</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">					if (row.getRowNum() == 0) {</span>
+<span class="fc" id="L119">						readExcelHeader(row, nameIndexMap);</span>
+					} else {
+<span class="fc" id="L121">						items.add((T) readExcelContent(row, nameIndexMap));</span>
+					}
+<span class="fc" id="L123">				}</span>
+			}
+		} finally {
+<span class="pc bpc" id="L126" title="3 of 4 branches missed.">			if (inputStream != null) {</span>
+<span class="pc" id="L127">				inputStream.close();</span>
+			}
+		}
+
+<span class="fc" id="L131">		return items;</span>
+	}
+
+	private int findIndexCellByName(String name, Row row, boolean isMappedByUser) {
+
+<span class="fc" id="L136">		Iterator&lt;Cell&gt; iterator = row.cellIterator();</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">		while (iterator.hasNext()) {</span>
+<span class="fc" id="L138">			Cell cell = iterator.next();</span>
+			
+<span class="pc bpc" id="L140" title="1 of 2 branches missed.">			String cellValue = (isMappedByUser) ? getCellValue(cell) : getCellValue(cell).trim().replaceAll(&quot;\\s&quot;, &quot;&quot;);</span>
+			
+<span class="fc bfc" id="L142" title="All 2 branches covered.">			if (cellValue.equalsIgnoreCase(name)) {</span>
+<span class="fc" id="L143">				return cell.getColumnIndex();</span>
+			}
+<span class="fc" id="L145">		}</span>
+
+<span class="fc" id="L147">		return -1;</span>
+	}
+
+	private String getCellValue(Cell cell) {
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">		if (cell == null) {</span>
+<span class="nc" id="L152">			return null;</span>
+		}
+
+<span class="fc" id="L155">		String value = &quot;&quot;;</span>
+<span class="pc bpc" id="L156" title="2 of 4 branches missed.">		switch (cell.getCellType()) {</span>
+		case Cell.CELL_TYPE_BOOLEAN:
+<span class="nc" id="L158">			value += String.valueOf(cell.getBooleanCellValue());</span>
+<span class="nc" id="L159">			break;</span>
+		case Cell.CELL_TYPE_NUMERIC:
+<span class="pc bpc" id="L161" title="1 of 2 branches missed.">			if (DateUtil.isCellDateFormatted(cell)) {</span>
+<span class="nc" id="L162">				value += cell.getDateCellValue().toString();</span>
+			} else {
+<span class="fc" id="L164">				value += new BigDecimal(cell.getNumericCellValue()).toString();</span>
+			}
+
+<span class="fc" id="L167">			break;</span>
+		case Cell.CELL_TYPE_STRING:
+<span class="fc" id="L169">			value += cell.getStringCellValue();</span>
+			break;
+		}
+
+<span class="fc" id="L173">		return value;</span>
+	}
+
+	/**
+	 * Fetches the list of objects(classReference) from the input Excel file.
+	 * 
+	 * @param absoluteFilePath [String]
+	 * @param classReference
+	 * @return List&lt;T&gt;
+	 */
+	public static &lt;T&gt; List&lt;T&gt; getExcelObjectList(InputStream inputStream, Class classReference, int fileTypeCode)
+			throws Throwable {
+<span class="fc" id="L185">		List&lt;T&gt; excelObjectList = null;</span>
+
+<span class="fc" id="L187">		excelObjectList = ParserExOM.mapFromExcel(inputStream, fileTypeCode).toObjectOf(classReference).map();</span>
+
+<span class="fc" id="L189">		return excelObjectList;</span>
+	}
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.8.201612092310</span></div></body></html>
